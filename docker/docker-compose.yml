@@ -1,0 +1,85 @@
+version: '3.7'
+
+#Docker Networks
+networks:
+  app-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: ${SUBNET_IP}
+services:
+  php:
+    build:
+      context: ./php
+      args:
+        CURRENT_USER: ${CURRENT_USER}
+    environment:
+      XDEBUG_CONFIG: "remote_host=192.168.220.1 remote_enable=1"
+      PHP_IDE_CONFIG: "serverName=Docker"
+    volumes:
+      #- home-dir:${APP_PATH_CONTAINER}
+      - ${APP_PATH_HOST}:${APP_PATH_CONTAINER}
+      - ~/.composer:/var/www/.composer
+    networks:
+      - app-network
+    env_file:
+      - .env
+    working_dir: ${APP_PATH_CONTAINER}
+  mariadb:
+    image: ${COMPOSE_PROJECT_NAME}_mariadb
+    #container_name: ${COMPOSE_PROJECT_NAME}_mariadb_1
+    build:
+      context: ./mariadb
+      args:
+        CURRENT_USER: ${CURRENT_USER}
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      DB_PORT: ${DB_PORT}
+    volumes:
+    - mariadb-data:/var/lib/mysql
+    #- ${DB_PATH_HOST}:/var/lib/mysql
+    - ./mariadb/config:/etc/mysql/conf.d
+    ports: ['3306', '13306:3306']
+    networks:
+      - app-network
+    env_file:
+        - .env
+  nginx:
+    image: ${COMPOSE_PROJECT_NAME}_nginx
+    #container_name: ${COMPOSE_PROJECT_NAME}_nginx_1
+    build:
+      context: ./nginx
+      args:
+        CURRENT_USER: ${CURRENT_USER}
+        #- http_proxy
+        #- https_proxy
+        #- no_proxy
+    depends_on:
+      - php
+      - mariadb
+    volumes:
+      #- ${APP_PATH_HOST}:${APP_PATH_CONTAINER}
+      - ${APP_PATH_HOST}:${APP_PATH_CONTAINER}
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/sites/:/etc/nginx/sites-available
+      - ./nginx/conf.d/:/etc/nginx/conf.d
+      - ./nginx/ssl/:/etc/nginx/ssl
+      #- ./nginx/conf.d/:/etc/nginx/conf.d
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - app-network
+    environment:
+      VIRTUAL_HOST: ${VIRTUAL_HOST}
+      #VIRTUAL_PORT: 8080
+    env_file:
+      - .env
+
+#Volumes
+volumes:
+  mariadb-data:
